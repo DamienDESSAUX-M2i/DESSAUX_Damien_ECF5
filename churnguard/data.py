@@ -21,7 +21,7 @@ class DataConfig:
 
 
 DEFAULT_CONFIG = DataConfig(
-    data_path=Path(__file__).resolve().parent / "data" / "telco_churn.csv",
+    data_path=Path(__file__).resolve().parent.parent / "data" / "telco_churn.csv",
 )
 
 

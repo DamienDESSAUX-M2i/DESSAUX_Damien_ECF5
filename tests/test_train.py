@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from churnguard.data import preprocess_data
-from churnguard.train import RandomForestClassifierParameters, train_model
+from churnguard.train import ModelName, RandomForestClassifierParameters, train_model
 from sklearn.pipeline import Pipeline
 
 
@@ -47,7 +47,7 @@ def test_train_model_returns_fitted_pipeline(
     model: Pipeline = train_model(
         features=features,
         target=target,
-        model_name="random_forest",
+        model_name=ModelName.RANDOM_FOREST,
         model_parameters=RandomForestClassifierParameters(),
     )
 

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from enum import StrEnum
 
 import numpy as np
 import pandas as pd
 from sklearn.base import ClassifierMixin
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -18,14 +20,47 @@ class ModelValidationError(Exception):
     """Custom exception raised for model-related validation errors."""
 
 
+class ModelName(StrEnum):
+    """Enumeration for model name."""
+
+    LOGISTIC_REGRESSION = "logistic_regression"
+    RANDOM_FOREST = "random_forest"
+    GRADIENT_BOOSTING = "gradient_boosting"
+
+
 @dataclass(frozen=True)
-class RandomForestClassifierParameters:
+class ModelParameters:
+    """Hyperparameters for model."""
+
+    random_state: int = 42
+
+
+@dataclass(frozen=True)
+class LogisticRegressionParameters(ModelParameters):
+    """Hyperparameters for LogisticRegression."""
+
+
+@dataclass(frozen=True)
+class RandomForestClassifierParameters(ModelParameters):
     """Hyperparameters for RandomForestClassifier."""
 
-    n_estimators: int = 200
+    n_estimators: int = 100
     max_depth: int | None = 10
-    random_state: int = 42
     n_jobs: int = -1
+
+
+@dataclass(frozen=True)
+class GradientBoostingClassifierParameters(ModelParameters):
+    """Hyperparameters for GradientBoostingClassifier."""
+
+    n_estimators: int = 100
+
+
+MODEL_REGISTRY: dict[ModelName, tuple[type[ClassifierMixin], type[ModelParameters]]] = {
+    ModelName.LOGISTIC_REGRESSION: (LogisticRegression, LogisticRegressionParameters),
+    ModelName.RANDOM_FOREST: (RandomForestClassifier, RandomForestClassifierParameters),
+    ModelName.GRADIENT_BOOSTING: (GradientBoostingClassifier, GradientBoostingClassifierParameters),
+}
 
 
 def _extract_feature_types(features: pd.DataFrame) -> tuple[list[str], list[str]]:
@@ -84,8 +119,8 @@ def _build_preprocessor(num_cols: list[str], cat_cols: list[str]) -> ColumnTrans
 
 
 def _build_classifier(
-    model_name: str,
-    model_parameters: RandomForestClassifierParameters,
+    model_name: ModelName,
+    model_parameters: ModelParameters,
 ) -> ClassifierMixin:
     """Instantiate a classifier based on model name.
 
@@ -100,21 +135,24 @@ def _build_classifier(
         ModelValidationError: If model is unsupported.
 
     """
-    if model_name == "random_forest":
-        return RandomForestClassifier(
-            n_estimators=model_parameters.n_estimators,
-            max_depth=model_parameters.max_depth,
-            random_state=model_parameters.random_state,
-            n_jobs=model_parameters.n_jobs,
+    if model_name not in MODEL_REGISTRY:
+        raise ModelValidationError(f"Unsupported model: {model_name}")
+
+    model_cls, param_cls = MODEL_REGISTRY[model_name]
+
+    if not isinstance(model_parameters, param_cls):
+        raise ModelValidationError(
+            f"Invalid parameters for model {model_name}: {type(model_parameters)}"
         )
 
-    raise ModelValidationError(f"Unsupported model: {model_name}")
+    params = asdict(model_parameters)
+    return model_cls(**params)
 
 
 def build_model(
     features: pd.DataFrame,
-    model_name: str,
-    model_parameters: RandomForestClassifierParameters,
+    model_name: ModelName,
+    model_parameters: ModelParameters,
 ) -> Pipeline:
     """Build a full ML pipeline including preprocessing and model.
 
@@ -150,8 +188,8 @@ def build_model(
 def train_model(
     features: pd.DataFrame,
     target: pd.Series,
-    model_name: str,
-    model_parameters: RandomForestClassifierParameters,
+    model_name: ModelName,
+    model_parameters: ModelParameters,
 ) -> Pipeline:
     """Train a machine learning pipeline.
 
