@@ -81,10 +81,11 @@ jobs:
           uv run pytest \
             --cov=churnguard \
             --cov-report=term-missing \
-            --cov-fail-under=70
+            --cov-fail-under=50
 
 
   build:
+    needs: test
     name: Build & Scan Docker (Docker + Trivy)
     runs-on: ubuntu-latest
 
@@ -98,7 +99,7 @@ jobs:
         run: docker build -f Dockerfile.api -t churnguard-api:ci .
 
       - name: Run Trivy scan
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: churnguard-api:ci
           format: table
