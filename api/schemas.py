@@ -150,4 +150,4 @@ class HealthResponse(BaseModel):
 
     status: Literal["healthy", "unhealthy"]
     model: str = Field(..., description="Model name")
-    version: str = Field(..., description="Model version")
+    version: int | None = Field(..., description="Model version")
