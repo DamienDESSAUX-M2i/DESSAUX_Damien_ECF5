@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+.git/
+.gitignore
+tests/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.vscode/
+mlruns/
+.coverage
+.pre-commit-config.yaml
+docs/
+mlflow.db
+README.mb

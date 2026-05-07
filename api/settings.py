@@ -10,6 +10,7 @@ class MlflowSettings:
 
     tracking_uri: str
     experiment_name: str
+    artifact_path: str
     registered_model_name: str
     stage_production: str
     metric_name: str
@@ -23,13 +24,14 @@ class MlflowSettings:
 
         """
         return cls(
-            tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"),
+            tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"),
             experiment_name=os.getenv(
                 "EXPERIMENT_NAME",
                 "telco-customer-churn",
             ),
+            artifact_path=os.getenv("ARTIFACT_PATH", "model"),
             registered_model_name=os.getenv(
-                "REGISTRY_MODEL_NAME",
+                "REGISTRERED_MODEL_NAME",
                 "churnguard",
             ),
             stage_production=os.getenv("STAGE_PRODUCTION", "Production"),

@@ -1,0 +1,40 @@
+# ===
+# Builder stage
+# ===
+
+FROM astral/uv:python3.11-bookworm-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+
+RUN uv sync --frozen --no-dev
+
+COPY churnguard churnguard
+COPY data data
+COPY run_train.py .
+
+
+# ===
+# Runtime stage
+# ===
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY --from=builder /app/.venv /app/.venv
+
+COPY --from=builder /app /app
+
+ENV PATH="/app/.venv/bin:${PATH}"
+
+EXPOSE 5001
+
+CMD ["python", "run_train.py", "--model", "all"]

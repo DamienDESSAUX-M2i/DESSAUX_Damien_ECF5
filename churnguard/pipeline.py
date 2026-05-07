@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import asdict, dataclass
 from typing import cast
 
@@ -20,19 +21,57 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class MlflowConfig:
-    """Define MLflow configuration."""
+class MlflowSettings:
+    """Define MLflow configuration settings."""
 
-    mlflow_tracking_uri: str = "http://localhost:5000"
-    experiment_name: str = "telco-customer-churn"
-    artifact_path: str = "model"
-    registered_model_name: str = "churnguard"
-    stage_staging = "Staging"
-    stage_production = "Production"
-    metric_name: str = "f1"
+    tracking_uri: str
+    experiment_name: str
+    artifact_path: str
+    registered_model_name: str
+    stage_staging: str
+    stage_production: str
+    metric_name: str
+
+    @classmethod
+    def from_env(cls) -> MlflowSettings:
+        """Create settings from environment variables.
+
+        Returns:
+            MlflowSettings: Instantiated settings object.
+
+        """
+        return cls(
+            tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"),
+            experiment_name=os.getenv(
+                "EXPERIMENT_NAME",
+                "telco-customer-churn",
+            ),
+            artifact_path=os.getenv("ARTIFACT_PATH", "model"),
+            registered_model_name=os.getenv(
+                "REGISTRERED_MODEL_NAME",
+                "churnguard",
+            ),
+            stage_staging=os.getenv("STAGE_STAGING", "Staging"),
+            stage_production=os.getenv("STAGE_PRODUCTION", "Production"),
+            metric_name=os.getenv("METRIC_NAME", "f1"),
+        )
+
+    def __post_init__(self) -> None:
+        """Validate MLflow configuration values after initialization.
+
+        Raises:
+            ValueError: If the tracking URI is empty or invalid.
+            ValueError: If the production stage is not a supported MLflow stage.
+
+        """
+        if not self.tracking_uri:
+            raise ValueError("mlflow_tracking_uri must not be empty")
+
+        if self.stage_production not in {"Production", "Staging"}:
+            raise ValueError("Invalid MLflow stage")
 
 
-MLFLOW_CONFIG = MlflowConfig()
+MLFLOW_SETTINGS = MlflowSettings.from_env()
 
 
 def ensure_experiment_exists(client: MlflowClient, experiment_name: str) -> str:
@@ -78,8 +117,8 @@ def _get_metric_safe(metrics: dict[str, float], key: str) -> float:
 def _get_best_production_metric(client: MlflowClient) -> float:
     """Return the best metric from the current Production model."""
     versions = client.get_latest_versions(
-        MLFLOW_CONFIG.registered_model_name,
-        stages=[MLFLOW_CONFIG.stage_production],
+        MLFLOW_SETTINGS.registered_model_name,
+        stages=[MLFLOW_SETTINGS.stage_production],
     )
 
     if not versions:
@@ -88,7 +127,7 @@ def _get_best_production_metric(client: MlflowClient) -> float:
     run_id = versions[0].run_id
     run = client.get_run(run_id)
 
-    return float(run.data.metrics.get(MLFLOW_CONFIG.metric_name, 0.0))
+    return float(run.data.metrics.get(MLFLOW_SETTINGS.metric_name, 0.0))
 
 
 def run(
@@ -107,16 +146,17 @@ def run(
     """
     logger.info(f"Start MLflow run for model={model_name.value}")
 
-    mlflow.set_tracking_uri(MLFLOW_CONFIG.mlflow_tracking_uri)
+    mlflow.set_tracking_uri(MLFLOW_SETTINGS.tracking_uri)
+    logger.info(f"mlflow_tracking_uri={mlflow.get_tracking_uri()}")
 
     client = MlflowClient()
 
-    experiment_id = ensure_experiment_exists(
+    ensure_experiment_exists(
         client,
-        MLFLOW_CONFIG.experiment_name,
+        MLFLOW_SETTINGS.experiment_name,
     )
 
-    mlflow.set_experiment(experiment_id=experiment_id)
+    mlflow.set_experiment(MLFLOW_SETTINGS.experiment_name)
 
     logger.info(f"Load dataset from {DEFAULT_CONFIG.data_path}")
     df = load_data(DEFAULT_CONFIG.data_path)
@@ -155,16 +195,19 @@ def run(
         logger.info("Infer model signature")
         signature = infer_signature(features_train, pipeline.predict(features_train))
 
+        input_example = features_train.iloc[:3]
+
         logger.info("Log model artifact")
         mlflow.sklearn.log_model(
             pipeline,
-            artifact_path=MLFLOW_CONFIG.artifact_path,
+            artifact_path=MLFLOW_SETTINGS.artifact_path,
+            input_example=input_example,
             signature=signature,
-            registered_model_name=MLFLOW_CONFIG.registered_model_name,
+            registered_model_name=MLFLOW_SETTINGS.registered_model_name,
         )
 
         model_versions = client.search_model_versions(
-            f"name='{MLFLOW_CONFIG.registered_model_name}'"
+            f"name='{MLFLOW_SETTINGS.registered_model_name}'"
         )
 
         current_version = max(
@@ -174,13 +217,13 @@ def run(
 
         logger.info(f"Promote model version {current_version.version} to Staging")
         client.transition_model_version_stage(
-            name=MLFLOW_CONFIG.registered_model_name,
+            name=MLFLOW_SETTINGS.registered_model_name,
             version=current_version.version,
-            stage=MLFLOW_CONFIG.stage_staging,
+            stage=MLFLOW_SETTINGS.stage_staging,
             archive_existing_versions=True,
         )
 
-        current_metric = _get_metric_safe(metrics, MLFLOW_CONFIG.metric_name)
+        current_metric = _get_metric_safe(metrics, MLFLOW_SETTINGS.metric_name)
         best_prod_metric = _get_best_production_metric(client)
         logger.info(f"Compare metrics: current={current_metric} vs production={best_prod_metric}")
 
@@ -188,9 +231,9 @@ def run(
             logger.info(f"Promote model version {current_version.version} to Production")
 
             client.transition_model_version_stage(
-                name=MLFLOW_CONFIG.registered_model_name,
+                name=MLFLOW_SETTINGS.registered_model_name,
                 version=current_version.version,
-                stage=MLFLOW_CONFIG.stage_production,
+                stage=MLFLOW_SETTINGS.stage_production,
                 archive_existing_versions=True,
             )
 

@@ -1,0 +1,79 @@
+name: "ecf5-churnguard"
+
+services:
+  mlflow:
+    container_name: mlflow
+    restart: "unless-stopped"
+    image: ghcr.io/mlflow/mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    networks:
+      - mlops-network
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root mlflow-artifacts:/
+      --serve-artifacts
+      --artifacts-destination /mlflow/artifacts
+      --allowed-hosts "*"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000')"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  trainer:
+    container_name: trainer
+    restart: "no"
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    build: 
+      context: .
+      dockerfile: Dockerfile.trainer
+    environment:
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+      - EXPERIMENT_NAME=${EXPERIMENT_NAME}
+      - ARTIFACT_PATH=${ARTIFACT_PATH}
+      - REGISTERED_MODEL_NAME=${REGISTERED_MODEL_NAME}
+      - STAGE_STAGING=${STAGE_STAGING}
+      - STAGE_PRODUCTION=${STAGE_PRODUCTION}
+      - METRIC_NAME=${METRIC_NAME}
+    networks:
+      - mlops-network
+
+  api:
+    container_name: api
+    restart: "unless-stopped"
+    depends_on:
+      mlflow:
+        condition: service_healthy
+      trainer:
+        condition: service_completed_successfully
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+      - EXPERIMENT_NAME=${EXPERIMENT_NAME}
+      - ARTIFACT_PATH=${ARTIFACT_PATH}
+      - REGISTERED_MODEL_NAME=${REGISTERED_MODEL_NAME}
+      - STAGE_STAGING=${STAGE_STAGING}
+      - STAGE_PRODUCTION=${STAGE_PRODUCTION}
+      - METRIC_NAME=${METRIC_NAME}
+    ports:
+      - "8000:8000"
+    networks:
+      - mlops-network
+
+volumes:
+  mlflow-data:
+
+networks:
+  mlops-network:
+    driver: bridge
