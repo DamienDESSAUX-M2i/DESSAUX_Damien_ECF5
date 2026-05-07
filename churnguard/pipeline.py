@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import asdict, dataclass
-from typing import cast
 
 import mlflow
 from mlflow.models import infer_signature
@@ -74,7 +73,7 @@ class MlflowSettings:
 MLFLOW_SETTINGS = MlflowSettings.from_env()
 
 
-def ensure_experiment_exists(client: MlflowClient, experiment_name: str) -> str:
+def ensure_experiment_exists(client: MlflowClient, experiment_name: str) -> None:
     """Ensure that an MLflow experiment exists and is active.
 
     Restore the experiment if it is soft-deleted, or create it if it does not exist.
@@ -82,9 +81,6 @@ def ensure_experiment_exists(client: MlflowClient, experiment_name: str) -> str:
     Args:
         client: MLflow tracking client.
         experiment_name: Name of the experiment.
-
-    Returns:
-        str: Experiment ID.
 
     Raises:
         RuntimeError: If the experiment cannot be created or restored.
@@ -94,8 +90,7 @@ def ensure_experiment_exists(client: MlflowClient, experiment_name: str) -> str:
 
     if experiment is None:
         logger.info(f"Create MLflow experiment: {experiment_name}")
-        experiment_id = client.create_experiment(experiment_name)
-        return cast(str, experiment_id)
+        client.create_experiment(experiment_name)
 
     if experiment.lifecycle_stage == "deleted":
         logger.warning(f"Restore deleted MLflow experiment: {experiment_name}")
@@ -104,8 +99,6 @@ def ensure_experiment_exists(client: MlflowClient, experiment_name: str) -> str:
     logger.info(
         f"Use existing MLflow experiment: {experiment_name} (id={experiment.experiment_id})"
     )
-
-    return cast(str, experiment.experiment_id)
 
 
 def _get_metric_safe(metrics: dict[str, float], key: str) -> float:
