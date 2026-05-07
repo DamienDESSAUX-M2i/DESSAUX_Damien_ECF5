@@ -44,6 +44,8 @@ select = [
 ignore = [
     "ANN101",  # self typing (inutile en pratique)
     "D100", "D104",  # tolérance modules/packages
+    "D203",  # D203 vs D211 → conflit, garder D211
+    "D213",  # D212 vs D213 → conflit, garder D212
 ]
 
 fixable = ["ALL"]
